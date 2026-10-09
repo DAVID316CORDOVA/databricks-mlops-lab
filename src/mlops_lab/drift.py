@@ -2,7 +2,6 @@
 porque el PSI son ~10 numeros por variable."""
 import numpy as np
 import pandas as pd
-from pyspark.ml.feature import Bucketizer
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 from scipy.stats import ks_2samp

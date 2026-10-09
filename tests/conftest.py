@@ -30,7 +30,7 @@ def spark():
 def make_source_df(spark, n=1000, bad_rows=True, seed=0):
     """Imita la tabla de origen. La tarifa depende de distancia y duracion (se puede aprender)."""
     rng = np.random.default_rng(seed)
-    start = datetime(2016, 1, 1)
+    start = datetime(2016, 1, 1)  # noqa: DTZ001
     rows = []
     for i in range(n):
         pickup = start + timedelta(minutes=int(i * 30 * 24 * 60 / n))   # repartido en 30 dias

@@ -5,7 +5,7 @@ from pyspark.sql import SparkSession
 
 from mlops_lab.config import SOURCE_TABLE, LabConfig
 from mlops_lab.etl import build_bronze_df, build_silver_df
-from mlops_lab.quality import check_quality
+
 
 def _parse(argv=None) -> LabConfig:
     parser = argparse.ArgumentParser()
