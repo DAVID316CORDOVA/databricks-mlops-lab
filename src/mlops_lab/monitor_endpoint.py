@@ -49,6 +49,7 @@ def main(argv=None):
     parser.add_argument("--minutes", type=int, default=60, help="ventana de tiempo a revisar")
     parser.add_argument("--min-rows", type=int, default=30, help="minimo de filas para evaluar")
     parser.add_argument("--fail-on-alert", action="store_true")
+    parser.add_argument("--prefix", default="taxi_fare", help="prefijo de la tabla de inferencia")
     args = parser.parse_args(argv)
     cfg = LabConfig(args.catalog, args.schema)
 
@@ -60,7 +61,8 @@ def main(argv=None):
     version = client.get_model_version_by_alias(cfg.model_name, args.alias)
     baseline = mlflow.artifacts.load_dict(f"runs:/{version.run_id}/drift_baseline.json")
 
-    report, n = check_endpoint_drift(spark.table(cfg.payload), baseline, args.minutes, args.min_rows)
+    report, n = check_endpoint_drift(
+    spark.table(cfg.payload_for(args.prefix)), baseline, args.minutes, args.min_rows)
     if report is None:
         print(f"Solo {n} peticiones en los ultimos {args.minutes} min (minimo {args.min_rows}). "
               "No se evalua drift.")

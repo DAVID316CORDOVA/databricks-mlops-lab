@@ -55,3 +55,8 @@ class LabConfig:
     @property
     def endpoint_drift_metrics(self) -> str:
         return self._table("endpoint_drift_metrics")
+    
+    @property
+    def payload_for(self, prefix: str) -> str:
+        """Tabla de inferencia de un endpoint: AI Gateway la llama <prefijo>_payload."""
+        return self._table(f"{prefix}_payload")

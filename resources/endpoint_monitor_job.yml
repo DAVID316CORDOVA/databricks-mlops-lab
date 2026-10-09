@@ -1,7 +1,22 @@
+# Job APARTE del pipeline: vigila el trafico REAL que recibe el endpoint.
+# Lee la tabla de inferencia (cada peticion guardada), calcula PSI y KS
+# contra la "foto" del entrenamiento y guarda el resultado en endpoint_drift_metrics.
 resources:
   jobs:
     endpoint_drift_monitor:
       name: endpoint_drift_monitor
+
+      # Si la tarea falla (drift fuerte), Databricks envia un correo
+      email_notifications:
+        on_failure:
+          - ${var.alert_email}
+
+      # Cada hora en punto. Empieza PAUSADO: activalo solo donde lo necesites
+      # (cada ejecucion usa computo). Normalmente, solo en produccion.
+      schedule:
+        quartz_cron_expression: "0 0 * * * ?"
+        timezone_id: America/Lima
+        pause_status: PAUSED
 
       environments:
         - environment_key: default
@@ -16,5 +31,10 @@ resources:
           python_wheel_task:
             package_name: mlops_lab
             entry_point: monitor_endpoint
+            # --minutes 60: mira la ultima hora (coincide con el horario, sin contar dos veces)
+            # --min-rows 30: si hay menos peticiones, no evalua (el PSI con pocos datos es ruido)
+            # --prefix: el prefijo de la tabla de ESTE ambiente (dev, staging o prod)
+            # --fail-on-alert: con drift fuerte la tarea falla y llega el correo
             parameters: ["--catalog", "${var.catalog}", "--schema", "${var.schema}",
-                         "--minutes", "1440", "--min-rows", "30"]
+                         "--prefix", "${var.endpoint_prefix}",
+                         "--minutes", "60", "--min-rows", "30", "--fail-on-alert"]

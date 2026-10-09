@@ -1,14 +1,46 @@
+# =====================================================================
+# Este archivo describe UN job de Databricks: "taxi_fare_pipeline".
+# Un job es una lista de tareas que se ejecutan en un orden.
+# El bundle (databricks.yml) lo despliega en dev, staging o prod.
+# =====================================================================
 resources:
   jobs:
-    taxi_fare_pipeline:
-      name: taxi_fare_pipeline
+    taxi_fare_pipeline:                 # nombre interno; el CD lo usa en "bundle run taxi_fare_pipeline"
+      name: taxi_fare_pipeline          # nombre que se ve en Databricks
 
+      # ---------------------------------------------------------------
+      # CORREO: si CUALQUIER tarea falla, Databricks envia un correo.
+      # El codigo Python no envia nada: solo FALLA a proposito
+      # (quality.py y monitor.py lanzan un error). Este bloque dice A QUIEN avisar.
+      # La direccion sale de databricks.yml (variable alert_email).
+      # ---------------------------------------------------------------
+      email_notifications:
+        on_failure:
+          - ${var.alert_email}
+
+      # ---------------------------------------------------------------
+      # HORARIO (cron): "0 0 6 * * ?" = todos los dias a las 6:00.
+      # Empieza PAUSADO. Solo prod lo activa (se cambia en databricks.yml).
+      # Mientras practicas, dejalo en PAUSED para no gastar.
+      # ---------------------------------------------------------------
+      schedule:
+        quartz_cron_expression: "0 0 6 * * ?"
+        timezone_id: America/Lima
+        pause_status: PAUSED
+
+      # ---------------------------------------------------------------
+      # PARAMETRO DEL JOB: permite simular drift sin tocar el codigo.
+      # 1.0 = datos normales, sin simulacion.
+      # ---------------------------------------------------------------
       parameters:
         - name: simulate_factor
           default: "1.0"
 
-      # Serverless: no hay cluster que configurar (ni nodos, ni costos de arranque que gestionar).
-      # El entorno instala nuestro wheel y lo comparten las 5 tareas.
+      # ---------------------------------------------------------------
+      # ENTORNO: como es serverless, no hay cluster que configurar.
+      # Aqui se dice que instale nuestro paquete (el .whl que construye
+      # el bundle) para que todas las tareas puedan usar nuestro codigo.
+      # ---------------------------------------------------------------
       environments:
         - environment_key: default
           spec:
@@ -16,7 +48,15 @@ resources:
             dependencies:
               - ../dist/*.whl
 
+      # ---------------------------------------------------------------
+      # TAREAS: se ejecutan en orden gracias a "depends_on".
+      # Cada una llama a una funcion de nuestro paquete (entry_point),
+      # definida en pyproject.toml en [project.scripts].
+      # Todas reciben el catalogo y el schema segun el ambiente.
+      # ---------------------------------------------------------------
       tasks:
+
+        # 1) BRONZE: copia fiel de la tabla de origen. Crea el schema si no existe.
         - task_key: ingest_bronze
           environment_key: default
           python_wheel_task:
@@ -24,15 +64,20 @@ resources:
             entry_point: ingest_bronze
             parameters: ["--catalog", "${var.catalog}", "--schema", "${var.schema}"]
 
+        # 2) SILVER: limpia los datos, crea las features y COMPRUEBA LA CALIDAD.
+        #    Si se descartan demasiadas filas, lanza un error: el job falla y llega correo.
         - task_key: build_silver
           depends_on:
-            - task_key: ingest_bronze
+            - task_key: ingest_bronze          # espera a que termine bronze
           environment_key: default
           python_wheel_task:
             package_name: mlops_lab
             entry_point: build_silver
             parameters: ["--catalog", "${var.catalog}", "--schema", "${var.schema}"]
 
+        # 3) TRAIN: entrena el modelo y lo registra. Solo pasa a ser "champion"
+        #    si es mejor que el champion actual (compara RMSE).
+        #    max_retries: 1 = si falla por un error tecnico, reintenta una vez.
         - task_key: train
           depends_on:
             - task_key: build_silver
@@ -44,6 +89,7 @@ resources:
             parameters: ["--catalog", "${var.catalog}", "--schema", "${var.schema}",
                          "--engine", "${var.engine}"]
 
+        # 4) PREDICT: genera predicciones con el modelo champion.
         - task_key: predict
           depends_on:
             - task_key: train
@@ -53,6 +99,10 @@ resources:
             entry_point: predict
             parameters: ["--catalog", "${var.catalog}", "--schema", "${var.schema}"]
 
+        # 5) MONITOR_DRIFT: LA COMPUERTA DE CALIDAD.
+        #    Calcula PSI y KS de cada variable y el MAE del modelo.
+        #    --fail-on-alert: si hay drift fuerte o el MAE supera max_mae_ratio veces
+        #                     el de entrenamiento, la tarea FALLA (y llega correo).
         - task_key: monitor_drift
           depends_on:
             - task_key: predict
@@ -61,13 +111,18 @@ resources:
             package_name: mlops_lab
             entry_point: monitor_drift
             parameters: ["--catalog", "${var.catalog}", "--schema", "${var.schema}",
-                         "--simulate-factor", "{{job.parameters.simulate_factor}}"]
+                         "--simulate-factor", "{{job.parameters.simulate_factor}}",
+                         "--max-mae-ratio", "${var.max_mae_ratio}", "--fail-on-alert"]
 
-
+        # 6) DEPLOY_ENDPOINT: crea o actualiza el endpoint de Model Serving
+        #    para que sirva el modelo champion.
+        #    Depende de monitor_drift: si la compuerta falla, esta tarea NO corre,
+        #    y el endpoint sigue sirviendo el modelo anterior.
+        #    El nombre y el prefijo cambian por ambiente (staging, prod).
         - task_key: deploy_endpoint
           depends_on:
-            - task_key: monitor_drift          # solo corre si la tarea de calidad pasa
-          environment_key: default             # el mismo que usan las otras tareas
+            - task_key: monitor_drift
+          environment_key: default
           python_wheel_task:
             package_name: mlops_lab
             entry_point: deploy_endpoint
