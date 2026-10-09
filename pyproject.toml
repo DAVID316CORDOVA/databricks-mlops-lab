@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mlops_lab"
+version = "0.1.0"
+requires-python = ">=3.10"
+# pyspark NO va aqui: el cluster de Databricks ya lo trae
+dependencies = ["mlflow", "scipy", "pandas", "scikit-learn"]
+
+[project.optional-dependencies]
+dev = ["pytest", "pyspark", "build", "ruff","databricks-sdk"]
+
+# Cada linea = una tarea del job (entry_point en el YAML)
+[project.scripts]
+ingest_bronze = "mlops_lab.cli:ingest_bronze"
+build_silver = "mlops_lab.cli:build_silver"
+train = "mlops_lab.train:main"
+predict = "mlops_lab.predict:main"
+monitor_drift = "mlops_lab.monitor:main"
+monitor_endpoint = "mlops_lab.monitor_endpoint:main"
+deploy_endpoint = "mlops_lab.deploy_endpoint:main"
+
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100

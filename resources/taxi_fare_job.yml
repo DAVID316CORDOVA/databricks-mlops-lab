@@ -1,0 +1,75 @@
+resources:
+  jobs:
+    taxi_fare_pipeline:
+      name: taxi_fare_pipeline
+
+      parameters:
+        - name: simulate_factor
+          default: "1.0"
+
+      # Serverless: no hay cluster que configurar (ni nodos, ni costos de arranque que gestionar).
+      # El entorno instala nuestro wheel y lo comparten las 5 tareas.
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "2"
+            dependencies:
+              - ../dist/*.whl
+
+      tasks:
+        - task_key: ingest_bronze
+          environment_key: default
+          python_wheel_task:
+            package_name: mlops_lab
+            entry_point: ingest_bronze
+            parameters: ["--catalog", "${var.catalog}", "--schema", "${var.schema}"]
+
+        - task_key: build_silver
+          depends_on:
+            - task_key: ingest_bronze
+          environment_key: default
+          python_wheel_task:
+            package_name: mlops_lab
+            entry_point: build_silver
+            parameters: ["--catalog", "${var.catalog}", "--schema", "${var.schema}"]
+
+        - task_key: train
+          depends_on:
+            - task_key: build_silver
+          environment_key: default
+          max_retries: 1
+          python_wheel_task:
+            package_name: mlops_lab
+            entry_point: train
+            parameters: ["--catalog", "${var.catalog}", "--schema", "${var.schema}",
+                         "--engine", "${var.engine}"]
+
+        - task_key: predict
+          depends_on:
+            - task_key: train
+          environment_key: default
+          python_wheel_task:
+            package_name: mlops_lab
+            entry_point: predict
+            parameters: ["--catalog", "${var.catalog}", "--schema", "${var.schema}"]
+
+        - task_key: monitor_drift
+          depends_on:
+            - task_key: predict
+          environment_key: default
+          python_wheel_task:
+            package_name: mlops_lab
+            entry_point: monitor_drift
+            parameters: ["--catalog", "${var.catalog}", "--schema", "${var.schema}",
+                         "--simulate-factor", "{{job.parameters.simulate_factor}}"]
+
+
+        - task_key: deploy_endpoint
+          depends_on:
+            - task_key: monitor_drift          # solo corre si la tarea de calidad pasa
+          environment_key: default             # el mismo que usan las otras tareas
+          python_wheel_task:
+            package_name: mlops_lab
+            entry_point: deploy_endpoint
+            parameters: ["--catalog", "${var.catalog}", "--schema", "${var.schema}",
+                         "--name", "${var.endpoint_name}", "--prefix", "${var.endpoint_prefix}"]

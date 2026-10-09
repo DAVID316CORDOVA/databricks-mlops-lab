@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+mlflow
+scikit-learn
+pandas
+httpx
+locust
+azure-storage-file-datalake
+azure-storage-file-datalake

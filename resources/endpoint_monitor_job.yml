@@ -1,0 +1,20 @@
+resources:
+  jobs:
+    endpoint_drift_monitor:
+      name: endpoint_drift_monitor
+
+      environments:
+        - environment_key: default
+          spec:
+            environment_version: "2"
+            dependencies:
+              - ../dist/*.whl
+
+      tasks:
+        - task_key: check_endpoint_drift
+          environment_key: default
+          python_wheel_task:
+            package_name: mlops_lab
+            entry_point: monitor_endpoint
+            parameters: ["--catalog", "${var.catalog}", "--schema", "${var.schema}",
+                         "--minutes", "1440", "--min-rows", "30"]

@@ -1,0 +1,41 @@
+name: CD
+
+# Se ejecuta al hacer merge a main. Si CI no pasa, no se debe haber hecho merge.
+on:
+  push:
+    branches: [main]
+
+jobs:
+  staging:
+    runs-on: ubuntu-latest
+    environment: staging
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install build
+      - uses: databricks/setup-cli@main
+      - run: databricks bundle deploy -t staging
+      # Corre el pipeline de verdad. Si una tarea falla (error, drift fuerte o modelo
+      # degradado) el comando devuelve error y este job falla: NO se llega a produccion.
+      - run: databricks bundle run taxi_fare_pipeline -t staging
+
+  production:
+    needs: staging                         # solo si staging salio bien
+    runs-on: ubuntu-latest
+    environment: production                # aqui esta la aprobacion manual
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install build
+      - uses: databricks/setup-cli@main
+      - run: databricks bundle deploy -t prod

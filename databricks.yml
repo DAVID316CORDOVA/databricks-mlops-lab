@@ -1,0 +1,59 @@
+bundle:
+  name: databricks_mlops_lab
+
+artifacts:
+  mlops_lab_wheel:
+    type: whl
+    build: python -m build --wheel
+    path: .
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: Catalogo de Unity Catalog donde se crean las tablas
+    default: workspace
+  schema:
+    description: Esquema del entorno (dev y staging usan esquemas distintos)
+  engine:
+    description: "Motor de entrenamiento: sklearn (por defecto en serverless) o spark (Spark ML)"
+    default: sklearn
+
+
+variables:
+  endpoint_name:
+    description: Nombre del endpoint de serving
+    default: taxi-fare-dev
+  endpoint_prefix:
+    description: Prefijo de la tabla de inferencia
+    default: taxi_fare
+
+targets:
+  staging:
+    variables:
+      endpoint_name: taxi-fare-staging
+      endpoint_prefix: taxi_fare_staging
+  prod:
+    variables:
+      endpoint_name: taxi-fare-prod
+      endpoint_prefix: taxi_fare_prod
+
+
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://adb-7405611969133544.4.azuredatabricks.net
+    variables:
+      schema: mlops_dev
+
+  staging:
+    presets:
+      name_prefix: "[staging] "
+    workspace:
+      host: https://adb-7405611969133544.4.azuredatabricks.net
+    variables:
+      schema: mlops_staging
