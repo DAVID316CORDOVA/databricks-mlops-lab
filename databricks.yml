@@ -1,6 +1,7 @@
 bundle:
   name: databricks_mlops_lab
 
+# Como construir el paquete Python (wheel) que se despliega al workspace
 artifacts:
   mlops_lab_wheel:
     type: whl
@@ -10,18 +11,22 @@ artifacts:
 include:
   - resources/*.yml
 
+# Variables: valores que cambian segun el entorno
 variables:
   catalog:
     description: Catalogo de Unity Catalog donde se crean las tablas
     default: workspace
   schema:
-    description: Esquema del entorno (dev y staging usan esquemas distintos)
+    description: Esquema del entorno (dev, staging y prod usan esquemas distintos)
+  alert_email:
+    description: A quien se avisa cuando un job falla (error, drift fuerte o modelo degradado)
+    default: felix.david.cordova.garcia@gmail.com
+  max_mae_ratio:
+    description: Alerta si el error actual supera X veces el del entrenamiento
+    default: "1.3"
   engine:
     description: "Motor de entrenamiento: sklearn (por defecto en serverless) o spark (Spark ML)"
     default: sklearn
-
-
-variables:
   endpoint_name:
     description: Nombre del endpoint de serving
     default: taxi-fare-dev
@@ -30,30 +35,28 @@ variables:
     default: taxi_fare
 
 targets:
-  staging:
-    variables:
-      endpoint_name: taxi-fare-staging
-      endpoint_prefix: taxi_fare_staging
-  prod:
-    variables:
-      endpoint_name: taxi-fare-prod
-      endpoint_prefix: taxi_fare_prod
-
-
-
-targets:
-  dev:
-    mode: development
+  dev:                                  # tu entorno personal de pruebas
+    mode: development                   # prefija los recursos con tu usuario y pausa horarios
     default: true
     workspace:
       host: https://adb-7405611969133544.4.azuredatabricks.net
     variables:
       schema: mlops_dev
 
-  staging:
+  staging:                              # validacion antes de produccion
     presets:
-      name_prefix: "[staging] "
+      name_prefix: "[staging] "         # distingue los recursos de staging por nombre
     workspace:
       host: https://adb-7405611969133544.4.azuredatabricks.net
     variables:
       schema: mlops_staging
+      endpoint_name: taxi-fare-staging
+      endpoint_prefix: taxi_fare_staging
+
+  prod:                                 # produccion: solo se despliega tras pasar CI y staging
+    workspace:
+      host: https://adb-7405611969133544.4.azuredatabricks.net
+    variables:
+      schema: mlops_prod
+      endpoint_name: taxi-fare-prod
+      endpoint_prefix: taxi_fare_prod
